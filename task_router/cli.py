@@ -1,5 +1,6 @@
 """CLI interface for Task Router — Click + Rich."""
 
+import json
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -36,23 +37,45 @@ STATUS_STYLE = {
     "blocked": "[red]blocked[/]",
 }
 
+# Global flags
+_json_output = False
+_quiet_mode = False
+
+
+def _out(message: str = ""):
+    """Print only if not quiet mode."""
+    if not _quiet_mode:
+        console.print(message)
+
+
+def _json_out(data):
+    """Print as JSON if --json flag is set."""
+    if _json_output:
+        print(json.dumps(data, indent=2, default=str))
+        return True
+    return False
+
 
 def _short_id(task_id: str) -> str:
     return task_id[:8]
 
 
 @click.group()
-@click.version_option(version="0.1.0")
-def main():
+@click.version_option(version="0.2.0")
+@click.option("--json", "json_flag", is_flag=True, help="Output as JSON")
+@click.option("--quiet", "-q", is_flag=True, help="Suppress non-essential output")
+def main(json_flag, quiet):
     """Task Router — unified task ingestion, prioritization, and routing."""
-    pass
+    global _json_output, _quiet_mode
+    _json_output = json_flag
+    _quiet_mode = quiet
 
 
 @main.command()
 def init():
     """Initialize the database and create tables."""
     init_db()
-    console.print("[bold green]✓ Database initialized[/] at ~/.openclaw/taskrouter.db")
+    _out("[bold green]✓ Database initialized[/] at ~/.openclaw/taskrouter.db")
 
 
 @main.command()
@@ -65,9 +88,7 @@ def init():
 @click.option("--description", default=None, help="Task description")
 def add(title, due, priority, project, effort, tags, description):
     """Add a new task."""
-    # Parse due date
     due_str = _parse_due(due)
-
     tag_list = [t.strip() for t in tags.split(",")] if tags else None
     score = compute_score(due_str, "manual", effort)
 
@@ -82,8 +103,13 @@ def add(title, due, priority, project, effort, tags, description):
         tags=tag_list,
         score=score,
     )
-    console.print(f"[bold green]✓ Task created[/] {_short_id(task_id)}: {title}")
-    console.print(f"  Score: {score:.3f} | Priority: {priority} | Effort: {effort}")
+
+    if _json_output:
+        task = get_task(task_id)
+        _json_out(task)
+    else:
+        _out(f"[bold green]✓ Task created[/] {_short_id(task_id)}: {title}")
+        _out(f"  Score: {score:.3f} | Priority: {priority} | Effort: {effort}")
 
 
 @main.command("list")
@@ -93,8 +119,11 @@ def add(title, due, priority, project, effort, tags, description):
 def list_cmd(status, source, project):
     """List tasks with optional filters."""
     tasks = list_tasks(status=status, source=source, project=project)
+    if _json_output:
+        _json_out(tasks)
+        return
     if not tasks:
-        console.print("[dim]No tasks found.[/]")
+        _out("[dim]No tasks found.[/]")
         return
 
     table = Table(title=f"Tasks ({len(tasks)})", show_lines=True)
@@ -120,7 +149,7 @@ def list_cmd(status, source, project):
             STATUS_STYLE.get(t["status"], t["status"]),
         )
 
-    console.print(table)
+    _out(table)
 
 
 @main.command()
@@ -129,8 +158,11 @@ def top(n):
     """Show top N highest-scored open tasks."""
     tasks = list_tasks(status="open")
     tasks = tasks[:n]
+    if _json_output:
+        _json_out(tasks)
+        return
     if not tasks:
-        console.print("[dim]No open tasks.[/]")
+        _out("[dim]No open tasks.[/]")
         return
 
     table = Table(title=f"Top {len(tasks)} Tasks", show_lines=True)
@@ -155,20 +187,22 @@ def top(n):
             f"{t['score']:.3f}",
         )
 
-    console.print(table)
+    _out(table)
 
 
 @main.command()
 @click.argument("task_id")
 def done(task_id):
     """Mark a task as complete."""
-    # Allow short IDs
     task = _resolve_task(task_id)
     if not task:
         console.print(f"[red]Task not found:[/] {task_id}")
         return
     complete_task(task["id"])
-    console.print(f"[bold green]✓ Done:[/] {task['title']}")
+    if _json_output:
+        _json_out({"status": "done", "task_id": task["id"], "title": task["title"]})
+    else:
+        _out(f"[bold green]✓ Done:[/] {task['title']}")
 
 
 @main.command()
@@ -198,10 +232,9 @@ def update(task_id, status, priority, effort, due, project):
         fields["project"] = project
 
     if not fields:
-        console.print("[dim]Nothing to update. Specify at least one field.[/]")
+        _out("[dim]Nothing to update. Specify at least one field.[/]")
         return
 
-    # Recompute score if relevant fields changed
     if any(k in fields for k in ("priority", "effort", "due")):
         new_priority = fields.get("priority", task["priority"])
         new_effort = fields.get("effort", task["effort"])
@@ -209,57 +242,121 @@ def update(task_id, status, priority, effort, due, project):
         fields["score"] = compute_score(new_due, task["source"], new_effort)
 
     update_task(task["id"], **fields)
-    console.print(f"[bold green]✓ Updated:[/] {task['title']}")
-    for k, v in fields.items():
-        console.print(f"  {k}: {v}")
+    if _json_output:
+        updated = get_task(task["id"])
+        _json_out(updated)
+    else:
+        _out(f"[bold green]✓ Updated:[/] {task['title']}")
+        for k, v in fields.items():
+            _out(f"  {k}: {v}")
 
 
 @main.command()
-@click.option("--source", "-s", type=click.Choice(["calendar", "notion", "inbox"]), default=None)
+@click.option("--source", "-s", type=click.Choice(["calendar", "notion", "inbox", "email"]), default=None)
 @click.option("--all", "ingest_all", is_flag=True, help="Ingest from all sources")
 def ingest(source, ingest_all):
     """Run ingestion from specified source or all."""
     from task_router.ingest.calendar import ingest_calendar
     from task_router.ingest.notion import ingest_notion
     from task_router.ingest.inbox import ingest_inbox
+    from task_router.ingest.email import ingest_email
 
     if not source and not ingest_all:
-        console.print("[yellow]Specify --source or --all[/]")
+        _out("[yellow]Specify --source or --all[/]")
         return
 
     sources = []
     if ingest_all:
-        sources = [("calendar", ingest_calendar), ("notion", ingest_notion), ("inbox", ingest_inbox)]
+        sources = [
+            ("calendar", ingest_calendar),
+            ("notion", ingest_notion),
+            ("inbox", ingest_inbox),
+            ("email", ingest_email),
+        ]
     elif source == "calendar":
         sources = [("calendar", ingest_calendar)]
     elif source == "notion":
         sources = [("notion", ingest_notion)]
     elif source == "inbox":
         sources = [("inbox", ingest_inbox)]
+    elif source == "email":
+        sources = [("email", ingest_email)]
 
     total = 0
+    results = {}
     for name, func in sources:
-        console.print(f"[dim]Ingesting from {name}...[/]")
+        _out(f"[dim]Ingesting from {name}...[/]")
         try:
             count = func()
-            console.print(f"  [green]{name}[/]: {count} new tasks")
+            results[name] = {"count": count, "error": None}
+            _out(f"  [green]{name}[/]: {count} new tasks")
             total += count
         except Exception as exc:
-            console.print(f"  [red]{name}[/]: Error — {exc}")
+            results[name] = {"count": 0, "error": str(exc)}
+            _out(f"  [red]{name}[/]: Error — {exc}")
 
-    console.print(f"\n[bold]Total: {total} new tasks[/]")
+    if _json_output:
+        _json_out({"total": total, "sources": results})
+        return
 
-    # Rescore after ingestion
+    _out(f"\n[bold]Total: {total} new tasks[/]")
+
     if total > 0:
         rescore_all()
-        console.print("[dim]Scores recalculated.[/]")
+        _out("[dim]Scores recalculated.[/]")
 
 
 @main.command()
 def score():
     """Recalculate priority scores for all open tasks."""
     count = rescore_all()
-    console.print(f"[bold green]✓ Rescored {count} tasks[/]")
+    if _json_output:
+        _json_out({"rescored": count})
+    else:
+        _out(f"[bold green]✓ Rescored {count} tasks[/]")
+
+
+@main.command("summary")
+def summary():
+    """Show a concise task summary (useful for heartbeat checks)."""
+    all_tasks = list_tasks()
+    open_tasks = [t for t in all_tasks if t["status"] == "open"]
+    in_progress = [t for t in all_tasks if t["status"] == "in_progress"]
+    done_tasks = [t for t in all_tasks if t["status"] == "done"]
+    blocked = [t for t in all_tasks if t["status"] == "blocked"]
+    overdue = [
+        t for t in open_tasks
+        if t.get("due") and t["due"][:10] < datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    ]
+
+    # Top 3 tasks
+    top3 = open_tasks[:3]
+
+    summary_data = {
+        "total": len(all_tasks),
+        "open": len(open_tasks),
+        "in_progress": len(in_progress),
+        "done": len(done_tasks),
+        "blocked": len(blocked),
+        "overdue": len(overdue),
+        "top_tasks": [
+            {"id": t["id"][:8], "title": t["title"], "score": round(t["score"], 3), "due": t.get("due", "")[:10]}
+            for t in top3
+        ],
+    }
+
+    if _json_output:
+        _json_out(summary_data)
+        return
+
+    console.print(f"[bold]📊 Task Summary[/]")
+    console.print(f"  Open: [green]{len(open_tasks)}[/] | In Progress: [yellow]{len(in_progress)}[/] | Done: [dim]{len(done_tasks)}[/] | Blocked: [red]{len(blocked)}[/]")
+    if overdue:
+        console.print(f"  [bold red]⚠ {len(overdue)} overdue[/bold red]")
+    if top3:
+        console.print(f"  [bold]Top:[/]")
+        for t in top3:
+            console.print(f"    {_short_id(t['id'])} {t['title'][:50]} ({t['score']:.3f})")
 
 
 def _parse_due(due: str | None) -> str | None:
@@ -278,7 +375,6 @@ def _parse_due(due: str | None) -> str | None:
         days = int(due_lower[1:-1])
         return (now + timedelta(days=days)).strftime("%Y-%m-%d")
     else:
-        # Assume ISO-8601 date
         return due
 
 
@@ -288,7 +384,6 @@ def _resolve_task(task_id: str) -> dict | None:
     if task:
         return task
 
-    # Try short ID prefix match
     all_tasks = list_tasks()
     matches = [t for t in all_tasks if t["id"].startswith(task_id)]
     if len(matches) == 1:
