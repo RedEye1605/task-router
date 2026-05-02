@@ -23,6 +23,7 @@ dev = ["pytest", "ruff"]
 
 [project.scripts]
 taskrouter = "task_router.cli:main"
+task-router = "task_router.cli:main"
 
 [build-system]
 requires = ["hatchling"]

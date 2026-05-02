@@ -59,11 +59,8 @@ def ingest_inbox(db_path: Path | None = None) -> int:
     if not content.strip():
         return 0
 
-    # Find all unchecked items: "- [ ] ..."
-    pattern = re.compile(r"^- \[ \] (.+)$", re.MULTILINE)
-    matches = pattern.findall(content)
-    if not matches:
-        return 0
+    lines = content.splitlines()
+    pattern = re.compile(r"^- \[ \] (.+)$")
 
     # Get already-ingested inbox task titles to avoid duplicates
     existing_tasks = list_tasks(source="inbox", db_path=db_path)
@@ -72,7 +69,11 @@ def ingest_inbox(db_path: Path | None = None) -> int:
     count = 0
     now = datetime.now(timezone.utc).isoformat()
 
-    for raw_title in matches:
+    for i, line in enumerate(lines, 1):
+        m = pattern.match(line)
+        if not m:
+            continue
+        raw_title = m.group(1)
         title = raw_title.strip()
         if not title:
             continue
@@ -86,9 +87,8 @@ def ingest_inbox(db_path: Path | None = None) -> int:
         title, project = _extract_project_from_line(title)
         tags = _parse_inbox_tags(raw_title)
 
-        # Compute line-based source_ref for tracking
-        line_num = content[:content.index(raw_title)].count("\n") + 1
-        ref = f"inbox:L{line_num}"
+        # Use line number directly for source_ref
+        ref = f"inbox:{INBOX_PATH.name}:{i}"
 
         score = compute_score(None, "inbox", "medium")
         add_task(

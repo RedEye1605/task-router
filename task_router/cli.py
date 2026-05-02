@@ -2,7 +2,10 @@
 
 import json
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+WIB = ZoneInfo("Asia/Jakarta")
 from pathlib import Path
 
 import click
@@ -252,6 +255,30 @@ def update(task_id, status, priority, effort, due, project):
 
 
 @main.command()
+@click.argument("task_id")
+@click.option("--force", is_flag=True, help="Skip confirmation")
+def delete(task_id, force):
+    """Delete a task."""
+    task = get_task(task_id)
+    if not task:
+        # Try short ID
+        from task_router.db import list_tasks
+        for t in list_tasks():
+            if t["id"].startswith(task_id):
+                task = t
+                break
+    if not task:
+        console.print(f"[red]Task not found:[/red] {task_id}")
+        raise SystemExit(1)
+    if not force:
+        console.print(f"Delete [cyan]{task['title']}[/cyan]?")
+        if not click.confirm("  Confirm"):
+            return
+    delete_task(task["id"])
+    console.print(f"[green]✓[/green] Deleted task {task['id'][:8]}")
+
+
+@main.command()
 @click.option("--source", "-s", type=click.Choice(["calendar", "notion", "inbox", "email"]), default=None)
 @click.option("--all", "ingest_all", is_flag=True, help="Ingest from all sources")
 def ingest(source, ingest_all):
@@ -364,7 +391,7 @@ def _parse_due(due: str | None) -> str | None:
     if not due:
         return None
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(WIB)
     due_lower = due.lower().strip()
 
     if due_lower == "today":

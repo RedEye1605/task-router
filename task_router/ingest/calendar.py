@@ -24,7 +24,7 @@ def ingest_calendar(days: int = 14, db_path: Path | None = None) -> int:
 
     try:
         result = subprocess.run(
-            [str(GCAL_PYTHON), str(GCAL_SCRIPT), "list", "--days", str(days)],
+            [str(GCAL_PYTHON), str(GCAL_SCRIPT), "list", str(days)],
             capture_output=True,
             text=True,
             timeout=30,

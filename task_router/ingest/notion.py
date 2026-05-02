@@ -114,6 +114,8 @@ def ingest_notion(db_path: Path | None = None) -> int:
     count = 0
     now = datetime.now(timezone.utc).isoformat()
 
+    from task_router.db import complete_task
+
     for page in results:
         props = page.get("properties", {})
         page_id = page.get("id", "")
@@ -158,7 +160,6 @@ def ingest_notion(db_path: Path | None = None) -> int:
         status = status_map.get(notion_status, "open")
 
         if status == "done" and existing:
-            from task_router.db import complete_task
             complete_task(existing["id"], db_path=db_path)
             continue
 
