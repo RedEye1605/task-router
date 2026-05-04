@@ -7,7 +7,6 @@ from pathlib import Path
 
 from task_router.db import (
     add_task,
-    get_sync_state,
     set_sync_state,
     list_tasks,
 )

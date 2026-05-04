@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
-from task_router.db import list_tasks, update_task, get_connection
+from task_router.db import list_tasks, update_task
 
 log = logging.getLogger(__name__)
 

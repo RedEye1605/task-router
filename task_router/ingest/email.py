@@ -4,7 +4,6 @@ import json
 import logging
 import re
 import subprocess
-from datetime import datetime, timezone
 from pathlib import Path
 
 from task_router.db import add_task, find_by_source_ref

@@ -3,11 +3,10 @@
 import json
 import logging
 import subprocess
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from task_router.db import add_task, get_sync_state, set_sync_state, find_by_source_ref
+from task_router.db import add_task, set_sync_state, find_by_source_ref
 from task_router.scorer import compute_score
 
 log = logging.getLogger(__name__)

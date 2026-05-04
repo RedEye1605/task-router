@@ -1,12 +1,8 @@
 """CLI interface for Task Router — Click + Rich."""
 
 import json
-import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-
-WIB = ZoneInfo("Asia/Jakarta")
-from pathlib import Path
 
 import click
 from rich.console import Console
@@ -22,6 +18,8 @@ from task_router.db import (
     delete_task,
 )
 from task_router.scorer import rescore_all, compute_score
+
+WIB = ZoneInfo("Asia/Jakarta")
 
 console = Console()
 
@@ -239,7 +237,6 @@ def update(task_id, status, priority, effort, due, project):
         return
 
     if any(k in fields for k in ("priority", "effort", "due")):
-        new_priority = fields.get("priority", task["priority"])
         new_effort = fields.get("effort", task["effort"])
         new_due = fields.get("due", task.get("due"))
         fields["score"] = compute_score(new_due, task["source"], new_effort)
@@ -376,12 +373,12 @@ def summary():
         _json_out(summary_data)
         return
 
-    console.print(f"[bold]📊 Task Summary[/]")
+    console.print("[bold]📊 Task Summary[/]")
     console.print(f"  Open: [green]{len(open_tasks)}[/] | In Progress: [yellow]{len(in_progress)}[/] | Done: [dim]{len(done_tasks)}[/] | Blocked: [red]{len(blocked)}[/]")
     if overdue:
         console.print(f"  [bold red]⚠ {len(overdue)} overdue[/bold red]")
     if top3:
-        console.print(f"  [bold]Top:[/]")
+        console.print("  [bold]Top:[/]")
         for t in top3:
             console.print(f"    {_short_id(t['id'])} {t['title'][:50]} ({t['score']:.3f})")
 
