@@ -61,7 +61,7 @@ def score_opportunity(issue, repo, tier):
     tier_weights = {"primary": 0.4, "tools": 0.3, "ml_ecosystem": 0.2}
     score += tier_weights.get(tier, 0.1) * 30
     
-    labels = [l.get("name", "").lower() for l in issue.get("labels", [])]
+    labels = [label.get("name", "").lower() for label in issue.get("labels", [])]
     
     # Label bonuses
     if any(x in labels for x in ["good first issue", "good-first-issue", "beginner friendly"]):
@@ -110,7 +110,7 @@ def main():
                                 "--state", "open", "--label", label, "--limit", "5"])
                 
                 for issue in issues:
-                    labels = [l.get("name", "") for l in issue.get("labels", [])]
+                    labels = [label.get("name", "") for label in issue.get("labels", [])]
                     opp = {
                         "repo": repo,
                         "repo_desc": desc,
@@ -137,7 +137,7 @@ def main():
                         "issue_number": issue.get("number"),
                         "title": issue.get("title"),
                         "url": issue.get("url"),
-                        "labels": [l.get("name", "") for l in issue.get("labels", [])],
+                        "labels": [label.get("name", "") for label in issue.get("labels", [])],
                         "comments": issue.get("comments", 0),
                     }
                     opp["score"] = score_opportunity(issue, repo, tier) * 0.5
