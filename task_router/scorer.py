@@ -32,7 +32,20 @@ EFFORT_INVERSE: dict[str, float] = {
 
 
 def deadline_urgency(due: str | None) -> float:
-    """Calculate urgency based on deadline proximity."""
+    """Calculate urgency based on deadline proximity.
+    
+    Args:
+        due: ISO-8601 date string (e.g., "2026-05-14" or "2026-05-14T23:00:00Z").
+            If None or invalid, returns low urgency.
+    
+    Returns:
+        Urgency score between 0.0 and 1.0:
+        - 1.0: Overdue
+        - 0.8: Due within 24 hours
+        - 0.5: Due within 3 days
+        - 0.2: Due within 7 days
+        - 0.1: Due later or invalid date
+    """
     if not due:
         return 0.1
 
@@ -73,7 +86,16 @@ def compute_score(
     source: str,
     effort: str,
 ) -> float:
-    """Compute priority score for a task."""
+    """Compute priority score for a task.
+    
+    Args:
+        due: ISO-8601 date string or None.
+        source: Task source (e.g., "calendar", "email", "whatsapp").
+        effort: Task effort level ("quick", "medium", "heavy").
+    
+    Returns:
+        Weighted priority score between 0.0 and 1.0.
+    """
     d_urgency = deadline_urgency(due)
     s_weight = SOURCE_WEIGHTS.get(source, 0.4)
     e_inverse = EFFORT_INVERSE.get(effort, 0.5)
@@ -82,7 +104,14 @@ def compute_score(
 
 
 def rescore_all(db_path: Any = None) -> int:
-    """Recalculate scores for all open/in_progress tasks. Returns count updated."""
+    """Recalculate scores for all open/in_progress tasks.
+    
+    Args:
+        db_path: Optional database path. If None, uses default path.
+    
+    Returns:
+        Number of tasks that were rescored and updated.
+    """
     tasks = list_tasks(db_path=db_path)
     count = 0
     for task in tasks:
