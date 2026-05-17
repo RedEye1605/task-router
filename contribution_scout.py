@@ -55,7 +55,17 @@ def run_gh(args, timeout=30):
         return []
 
 def score_opportunity(issue, repo, tier):
-    """Score an issue for contribution fit."""
+    """Score an issue for contribution fit.
+
+    Args:
+        issue: GitHub issue dict with number, title, labels, url, comments, body.
+        repo: Repository identifier (e.g., "owner/repo").
+        tier: Tier category ("primary", "tools", "ml_ecosystem").
+
+    Returns:
+        float: Opportunity score from 0-100 based on tier relevance, labels,
+              comment count, and issue description quality.
+    """
     score = 0.0
     
     tier_weights = {"primary": 0.4, "tools": 0.3, "ml_ecosystem": 0.2}
